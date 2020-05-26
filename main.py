@@ -143,6 +143,27 @@ class Generator(nn.Module):
         m = self.model(m)
         return m
 
+class DataLoader(object):
+    def __init__(self):
+        pass
+
+    def __call__(self, batch_size, path, train=True, download=True, shuffle=True):
+        data_loader = torch.utils.data.DataLoader(
+            datasets.MNIST(
+                path,
+                train=train,
+                download=download,
+                transform=transforms.Compose([
+                    transforms.ToTensor(),
+                    #transforms.Lambda(lambda x : x.repeat(3, 1, 1)),
+                    transforms.Normalize((0.5,), (0.5,))
+                ]),
+                batch_size=batch_size,
+                shuffle=shuffle
+            )
+        )
+        return data_loader
+
 def save_images(data, rows, cols, fpath):
     images = data.numpy().reshape(-1, 28, 28)
 
@@ -156,12 +177,17 @@ def save_images(data, rows, cols, fpath):
     plt.savefig(fpath)
     plt.close()
 
-def test(device, gen, batch_size):
+def test(device, gen):
     gen.to(device)
 
     Tensor = torch.cuda.FloatTensor if device is 'cuda' else torch.FloatTensor
-    target = Tensor(np.arange(batch_size))
-    l = torch.zeros(target.shape[0], 10)
+    target = Tensor(np.tile(np.arange(10), (10,)))    
+    l = Tensor(torch.zeros(10 * 10, 10))
+    l[range(l.shape[0]), target] = 1
+    z = Tensor(np.random.norma(0, 1, (l.shape[0], Generator.z_dim)))
+    fake = gen(z, l)
+    return fake
+
 
 def train(device, dis, gen, data_loader, batch_size, epochs):
     d_lr = 4e-4
@@ -206,3 +232,9 @@ def train(device, dis, gen, data_loader, batch_size, epochs):
             batches_done += 1
         d_lrs.step()
         g_lrs.step()
+
+if __name__ == '__main__':
+    data_loader = DataLoader()(64, 'data', True, True, True)
+    dis = Discriminator()
+    gen = Generator()
+    train('cuda', dis, gen, data_loader, 64, 1)
